@@ -1,172 +1,111 @@
 # Slipstream-Windows-Updates-Guide
 This guide is intended to help others figure out how to slipstream updates into a windows update iso or usb device
 
+## Needed:
+* dism (Deployment Image Servicing and Management tool)
+** https://technet.microsoft.com/en-us/library/hh825236.aspx
+* imgburn (http://www.imgburn.com/)
+* Rufus (https://rufus.akeo.ie/)
+* Windows DVD iso (https://gist.github.com/mkuba50/27c909501cbc2a4f169be4b4075a66ff)
+* wsusoffline (http://www.wsusoffline.net/)
 
-/PreventPending
-prevents installing items that makeing a "pending.xml" file.  effectively these are updates that need to preform reboot actions, if they're included the image is larger than a dvd-r.
+## Getting Ready
+First you need to extract the windows iso.  To make things easy, I recommend making a folder at the root of your c drive, i used `c:\wincd\`
 
----
-C:\wincd>dism /get-imageinfo /imagefile:c:\wincd\install.wim
+Here are the path's I used, yours may be different...
+`c:\wincd\dismmount` <- folder that dism mounts the install.wim into
+`c:\wincd\wsusoffline` <- location of wsusoffline
+`c:\wincd\Win 8.1 disks` <- location of windows iso's
+`C:\wincd\Win 8.1 disks\Win8.1_English_x64` <- location of extracted windows disks
+
+Once your iso has been extracted, move the `sources\install.wim` file to `c:\wincd\`
+
+> You may wish to rename this file `install-orig.wim` and make a copy to work with.
+
+now, open a command prompt as ADMINISTRATOR
+
+type `dism`
+
+you should see:
+```
+C:\wincd>dism
 
 Deployment Image Servicing and Management tool
 Version: 6.3.9600.17031
+
+```
+
+Followed by many details about how to use it.  If you don't see this, then you need to install dism.
+
+## Explore the install.wim
+
+type the following: `dism /get-imageinfo /imagefile:c:\wincd\install.wim`
+You should see something like this:
+```
+C:\wincd>dism /get-imageinfo /imagefile:c:\wincd\install.wim
+
+Deployment Image Servicing and Management tool Version: 6.3.9600.17031
 
 Details for image : c:\wincd\install.wim
 
-Index : 1
-Name : Windows 8.1 Pro
-Description : Windows 8.1 Pro
-Size : 13,185,962,705 bytes
+Index : 1 Name : Windows 8.1 Pro Description : Windows 8.1 Pro Size : 13,185,962,705 bytes
 
-Index : 2
-Name : Windows 8.1
-Description : Windows 8.1
-Size : 13,116,079,066 bytes
+Index : 2 Name : Windows 8.1 Description : Windows 8.1 Size : 13,116,079,066 bytes
 
 The operation completed successfully.
+```
 
----
+As you can see, my iso includes 2 indexes; Win 8.1 Pro & Win 8.1.  I don't actually need to have the Win 8.1 included, so i'm going to extract the first index from install.wim into install1.wim.
+`dism /export-image /sourceimagefile:c:\wincd\install.wim /destinationimagefile:c:\wincd\install1.wim /sourceindex:1`
 
-C:\wincd>dism /mount-wim /wimfile:c:\wincd\install.wim /mountdir:c:\wincd\dismmo
-unt /index:1
+```
+C:\wincd>dism /export-image /sourceimagefile:c:\wincd\install.wim /destinationimagefile:c:\wincd\install1.wim /sourceindex:1
 
 Deployment Image Servicing and Management tool
 Version: 6.3.9600.17031
 
-Mounting image
+Exporting image
 [==========================100.0%==========================]
 The operation completed successfully.
+```
 
----
+## Now we will mount the install1.wim
 
-~1.5hrs
+`dism /mount-wim /wimfile:c:\wincd\install1.wim /mountdir:c:\wincd\dismmount /index:1`
 
-C:\wincd>dism /image:C:\wincd\dismmount /Add-Package /PackagePath:C:\wincd\wsuso
-ffline\client\w63-x64\glb
+```
+C:\wincd>dism /mount-wim /wimfile:c:\wincd\install1.wim /mountdir:c:\wincd\dismmount /index:1
 
-Deployment Image Servicing and Management tool
-Version: 6.3.9600.17031
+Deployment Image Servicing and Management tool Version: 6.3.9600.17031
 
-Image Version: 6.3.9600.17031
+Mounting image [==========================100.0%==========================] The operation completed successfully.
+```
 
-Processing 1 of 184 - Adding package Package_for_KB2876331~31bf3856ad364e35~amd6
-4~~6.3.1.0
-[==========================100.0%==========================]
-Processing 2 of 184 - Adding package Package_for_KB2894852~31bf3856ad364e35~amd6
-4~~6.3.2.0
-[===========================99.5%========================= ]
-Processing 3 of 184 - Adding package Package_for_KB2894853~31bf3856ad364e35~amd6
-4~~6.3.1.3
-[==========================100.0%==========================]
+## Install Updates
+We now have the install1.wim file mounted to c:\wincd\dismmount.  Now we just need to install the updates to the mounted folder.
 
-....
+You can use wsusoffline to download all available updates, or you can pre-select a few.  I HIGHLY recommend adding kb3021910 which fixes windows update.
 
-Processing 182 of 184 - Adding package C:\wincd\wsusoffline\client\w63-x64\glb\W
-indows8.1-KB3014442-x64.msu
-[===========================99.8%========================= ]
-Processing 183 of 184 - Adding package C:\wincd\wsusoffline\client\w63-x64\glb\W
-indows8.1-KB3016437-x64.msu
-[==========================100.0%==========================]
-Processing 184 of 184 - Adding package C:\wincd\wsusoffline\client\w63-x64\glb\W
-indows8.1-KB3172614-x64.msu
-[===================        33.2%                          ]
+Single Package: `dism /image:C:\wincd\dismmount /Add-Package /PackagePath:C:\wincd\updates\windows8.1-kb3021910-x64_e291c0c339586e79c36ebfc0211678df91656c3d.msu`
+Folder of Packages: `dism /image:C:\wincd\dismmount /Add-Package /PackagePath:C:\wincd\wsuso ffline\client\w63-x64\glb`
 
-Error: 0x800f081e
+## Commit changes back to the install1.wim
+`dism /image:c:\wincd\dismmount /cleanup-image /analyzecomponentstore`
 
-The specified package is not applicable to this image.
-The specified package is not applicable to this image.
-The specified package is not applicable to this image.
-The specified package is not applicable to this image.
-The specified package is not applicable to this image.
-The specified package is not applicable to this image.
-Package C:\wincd\wsusoffline\client\w63-x64\glb\Windows8.1-KB3172614-x64.msu may
- have failed due to pending updates to servicing components in the image. Try th
-e command again.The command completed with errors.
-For more information, refer to the log file.
+## Final Steps 
+Now copy/move the install1.wim file back into the extracted windows disk.  make sure to rename it to `install.wim`.
 
-The DISM log file can be found at C:\Windows\Logs\DISM\dism.log
+Then use Imgburn to recreate the iso.  make sure to make it bootable and use the same bootsector as the original disk.
 
-C:\wincd>dism /image:C:\wincd\dismmount /Add-Package /PreventPending /PackagePat
-h:C:\wincd\wsusoffline\client\w63-x64\glb\Windows8.1-KB3172614-x64.msu
+You may also want to include this in a `EI.CFG` file, also in sources.
+```
+[EditionID]
+Professional
 
-Deployment Image Servicing and Management tool
-Version: 6.3.9600.17031
+[Channel]
+Volume
 
-Image Version: 6.3.9600.17031
-
-Processing 1 of 1 - Adding package C:\wincd\wsusoffline\client\w63-x64\glb\Windo
-ws8.1-KB3172614-x64.msu
-[==========================100.0%========================= ]
-The operation completed successfully.
-
----
-
-~10min
-
-C:\wincd>dism /image:c:\wincd\dismmount /cleanup-image /analyzecomponentstore
-
-Deployment Image Servicing and Management tool
-Version: 6.3.9600.17031
-
-Image Version: 6.3.9600.17031
-
-[==========================100.0%==========================]
-
-Component Store (WinSxS) information:
-
-Windows Explorer Reported Size of Component Store : 8.74 GB
-
-Actual Size of Component Store : 8.34 GB
-
-    Shared with Windows : 4.71 GB
-    Backups and Disabled Features : 3.32 GB
-    Cache and Temporary Data : 315.46 MB
-
-Date of Last Cleanup : 2014-11-21 11:55:11
-
-Number of Reclaimable Packages : 34
-Component Store Cleanup Recommended : Yes
-
-The operation completed successfully.
-
----
-
-C:\wincd>dism /image:c:\wincd\dismmount /cleanup-image /startcomponentcleanup /r
-esetbase
-
-Deployment Image Servicing and Management tool
-Version: 6.3.9600.17031
-
-Image Version: 6.3.9600.17031
-
-
-
-Error: 0x800f0806
-
-The operation could not be completed due to pending operations.
-
-The DISM log file can be found at C:\Windows\Logs\DISM\dism.log
-
-#Unable to cleanup due to the "pending" updates.  if we include "/preventpending" we are able to shrink
-
----
-
-~20 min
-
-C:\wincd>dism /unmount-wim /mountdir:C:\wincd\dismmount /commit
-
-Deployment Image Servicing and Management tool
-Version: 6.3.9600.17031
-
-Image File : c:\wincd\install.wim
-Image Index : 1
-Saving image
-[==========================100.0%==========================]
-Unmounting image
-[==========================100.0%==========================]
-The operation completed successfully.
-
----
-
-6:09p
-
+[VL]
+1
+```
+This prevents windows from requiring a license key to install.
